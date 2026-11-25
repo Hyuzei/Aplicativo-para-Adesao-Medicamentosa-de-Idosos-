@@ -1,0 +1,291 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function tokenPath(tokenId) {
+      return /databases/$(database)/documents/careLinkTokens/$(tokenId);
+    }
+
+    function roleOf(uid) {
+      return get(userPath(uid)).data.role;
+    }
+
+    function caregiverPatients(profile) {
+      return profile.get(
+        'linkedPatientIds',
+        profile.get('linkedPatientId', null) == null
+          ? []
+          : [profile.get('linkedPatientId', null)]
+      );
+    }
+
+    function validLinkToken(tokenId, assistedId, caregiverId) {
+      let before = get(tokenPath(tokenId)).data;
+      let after = getAfter(tokenPath(tokenId)).data;
+      return before.assistedId == assistedId
+        && before.usedBy == null
+        && before.expiresAt > request.time
+        && after.usedBy == caregiverId
+        && after.assistedId == assistedId;
+    }
+
+    function caregiverLinkUpdate(uid) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let oldPatients = caregiverPatients(resource.data);
+      let newPatients = caregiverPatients(request.resource.data);
+      let patientId = newPatients.size() == 0 ? null : newPatients[newPatients.size() - 1];
+      let tokenId = request.resource.data.linkTokenId;
+      return resource.data.role == 'caregiver'
+        && request.auth.uid == uid
+        && patientId is string
+        && newPatients.size() == oldPatients.size() + 1
+        && newPatients.size() <= 4
+        && newPatients.hasAll(oldPatients)
+        && request.resource.data.linkedPatientId
+          == (oldPatients.size() == 0 ? patientId : oldPatients[0])
+        && request.resource.data.linkedAt is timestamp
+        && tokenId is string
+        && changed.hasOnly([
+          'linkedPatientId', 'linkedPatientIds', 'linkedAt', 'linkTokenId'
+        ])
+        && validLinkToken(tokenId, patientId, uid);
+    }
+
+    function assistedLinkUpdate(uid) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let caregiverId = request.resource.data.linkedCaregiverId;
+      let tokenId = request.resource.data.linkTokenId;
+      return resource.data.role == 'caredFor'
+        && resource.data.linkedCaregiverId == null
+        && caregiverId is string
+        && request.resource.data.linkedAt is timestamp
+        && tokenId is string
+        && changed.hasOnly(['linkedCaregiverId', 'linkedAt', 'linkTokenId'])
+        && validLinkToken(tokenId, uid, caregiverId);
+    }
+
+    function caregiverDisconnectUpdate(uid) {
+      let oldPatients = caregiverPatients(resource.data);
+      let newPatients = caregiverPatients(request.resource.data);
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let patientWasRemoved =
+        (oldPatients.size() > 0
+          && patientReleased(uid, oldPatients[0], oldPatients, newPatients))
+        || (oldPatients.size() > 1
+          && patientReleased(uid, oldPatients[1], oldPatients, newPatients))
+        || (oldPatients.size() > 2
+          && patientReleased(uid, oldPatients[2], oldPatients, newPatients))
+        || (oldPatients.size() > 3
+          && patientReleased(uid, oldPatients[3], oldPatients, newPatients));
+      return resource.data.role == 'caregiver'
+        && oldPatients.size() == newPatients.size() + 1
+        && oldPatients.hasAll(newPatients)
+        && request.resource.data.linkedPatientId
+          == (newPatients.size() == 0 ? null : newPatients[0])
+        && patientWasRemoved
+        && changed.hasOnly([
+          'linkedPatientId', 'linkedPatientIds', 'linkedAt', 'linkTokenId'
+        ])
+        && (
+          request.auth.uid == uid
+          || (
+            oldPatients.hasAny([request.auth.uid])
+            && !newPatients.hasAny([request.auth.uid])
+          )
+        );
+    }
+
+    function patientReleased(uid, patientId, oldPatients, newPatients) {
+      return patientId is string
+        && oldPatients.hasAny([patientId])
+        && !newPatients.hasAny([patientId])
+        && get(userPath(patientId)).data.linkedCaregiverId == uid
+        && getAfter(userPath(patientId)).data.get('linkedCaregiverId', null)
+          == null
+        && getAfter(userPath(patientId)).data.get('linkedAt', null) == null
+        && getAfter(userPath(patientId)).data.get('linkTokenId', null) == null;
+    }
+
+    function assistedDisconnectUpdate(uid) {
+      let caregiverId = resource.data.linkedCaregiverId;
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return resource.data.role == 'caredFor'
+        && caregiverId is string
+        && (request.auth.uid == uid || request.auth.uid == caregiverId)
+        && caregiverPatients(get(userPath(caregiverId)).data).hasAny([uid])
+        && request.resource.data.linkedCaregiverId == null
+        && request.resource.data.get('linkedAt', null) == null
+        && request.resource.data.get('linkTokenId', null) == null
+        && changed.hasOnly(['linkedCaregiverId', 'linkedAt', 'linkTokenId'])
+        && !caregiverPatients(getAfter(userPath(caregiverId)).data)
+          .hasAny([uid]);
+    }
+
+    function validTokenConsumption(tokenId, assistedId) {
+      let caregiverAfter = getAfter(userPath(request.auth.uid)).data;
+      let caregiverBefore = get(userPath(request.auth.uid)).data;
+      let beforePatients = caregiverPatients(caregiverBefore);
+      let afterPatients = caregiverPatients(caregiverAfter);
+      let assistedAfter = getAfter(userPath(assistedId)).data;
+      return roleOf(request.auth.uid) == 'caregiver'
+        && beforePatients.size() < 4
+        && !beforePatients.hasAny([assistedId])
+        && afterPatients.size() == beforePatients.size() + 1
+        && afterPatients.hasAll(beforePatients)
+        && afterPatients.hasAny([assistedId])
+        && caregiverAfter.linkedPatientId
+          == (beforePatients.size() == 0
+            ? assistedId
+            : beforePatients[0])
+        && caregiverAfter.linkTokenId == tokenId
+        && assistedAfter.linkedCaregiverId == request.auth.uid
+        && assistedAfter.linkTokenId == tokenId;
+    }
+
+    function canReadAssistedData(assistedId) {
+      return signedIn()
+        && roleOf(assistedId) == 'caredFor'
+        && (
+          request.auth.uid == assistedId
+          || get(userPath(assistedId)).data.linkedCaregiverId == request.auth.uid
+        );
+    }
+
+    match /users/{uid} {
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly([
+          'name', 'email', 'role', 'linkedPatientId', 'linkedPatientIds',
+          'linkedCaregiverId', 'createdAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'name', 'email', 'role', 'createdAt'
+        ])
+        && request.resource.data.role in ['caregiver', 'caredFor']
+        && request.resource.data.name is string
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.linkedPatientId == null
+        && request.resource.data.linkedPatientIds == []
+        && request.resource.data.linkedCaregiverId == null;
+
+      allow get: if signedIn()
+        && (
+          request.auth.uid == uid
+          || (
+            resource.data.role == 'caredFor'
+            && resource.data.linkedCaregiverId == request.auth.uid
+          )
+          || (
+            resource.data.role == 'caregiver'
+            && caregiverPatients(resource.data).hasAny([request.auth.uid])
+          )
+        );
+      allow list: if false;
+      allow update: if signedIn()
+        && (
+          (request.auth.uid == uid && caregiverLinkUpdate(uid))
+          || (
+            resource.data.role == 'caredFor'
+            && assistedLinkUpdate(uid)
+          )
+          || caregiverDisconnectUpdate(uid)
+          || assistedDisconnectUpdate(uid)
+        );
+      allow delete: if false;
+
+      match /medications/{medicationId} {
+        function validMedication() {
+          return request.resource.data.keys().hasOnly([
+              'name', 'dosage', 'instructions', 'times', 'stock', 'updatedAt'
+            ])
+            && request.resource.data.name is string
+            && request.resource.data.dosage is string
+            && request.resource.data.instructions is string
+            && request.resource.data.times is list
+            && (
+              request.resource.data.stock == null
+              || request.resource.data.stock is int
+            )
+            && request.resource.data.updatedAt is timestamp;
+        }
+
+        allow read: if canReadAssistedData(uid);
+        allow create, update: if signedIn()
+          && request.auth.uid == uid
+          && roleOf(uid) == 'caredFor'
+          && validMedication();
+        allow delete: if signedIn()
+          && request.auth.uid == uid
+          && roleOf(uid) == 'caredFor';
+      }
+
+      match /doseStatuses/{doseId} {
+        function validDoseStatus() {
+          return request.resource.data.keys().hasOnly([
+              'dateKey', 'medicationId', 'time', 'status', 'updatedAt'
+            ])
+            && request.resource.data.dateKey is string
+            && request.resource.data.medicationId is string
+            && request.resource.data.time is string
+            && request.resource.data.status in ['pending', 'taken', 'missed']
+            && request.resource.data.updatedAt is timestamp;
+        }
+
+        allow read: if canReadAssistedData(uid);
+        allow create, update: if signedIn()
+          && request.auth.uid == uid
+          && roleOf(uid) == 'caredFor'
+          && validDoseStatus();
+        allow delete: if signedIn()
+          && request.auth.uid == uid
+          && roleOf(uid) == 'caredFor';
+      }
+    }
+
+    match /careLinkTokens/{tokenId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'assistedId', 'createdAt', 'expiresAt', 'usedBy'
+        ])
+        && request.resource.data.assistedId == request.auth.uid
+        && roleOf(request.auth.uid) == 'caredFor'
+        && get(userPath(request.auth.uid)).data.linkedCaregiverId == null
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt
+          <= request.time + duration.value(15, 'm')
+        && request.resource.data.usedBy == null;
+
+      allow get: if signedIn()
+        && roleOf(request.auth.uid) == 'caregiver'
+        && caregiverPatients(get(userPath(request.auth.uid)).data).size() < 4
+        && resource.data.usedBy == null
+        && resource.data.expiresAt > request.time;
+      allow list: if signedIn()
+        && roleOf(request.auth.uid) == 'caredFor'
+        && resource.data.assistedId == request.auth.uid;
+
+      allow update: if signedIn()
+        && resource.data.usedBy == null
+        && resource.data.expiresAt > request.time
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['usedBy', 'usedAt'])
+        && request.resource.data.usedBy == request.auth.uid
+        && request.resource.data.usedAt == request.time
+        && validTokenConsumption(tokenId, resource.data.assistedId);
+
+      allow delete: if signedIn()
+        && resource.data.assistedId == request.auth.uid
+        && roleOf(request.auth.uid) == 'caredFor'
+        && resource.data.usedBy == null;
+    }
+  }
+}

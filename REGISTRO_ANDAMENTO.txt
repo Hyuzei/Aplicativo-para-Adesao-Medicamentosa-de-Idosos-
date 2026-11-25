@@ -1,0 +1,100 @@
+REGISTRO DE ANDAMENTO — CUIDAR+
+Data: 15/11/2026
+Status: implementação em andamento; ainda há validações e configuração pendentes.
+
+MAPA MENTAL
+
+CUIDAR+
+|
++-- Acessibilidade e interface
+|   +-- Interface com linguagem mais simples e elementos maiores
+|   +-- Tema claro e modo escuro nas configurações
+|   +-- Telas distintas para pessoa cuidada e cuidador
+|
++-- Contas e Firebase
+|   +-- Login e criação de conta com Firebase Authentication
+|   +-- Perfis: Pessoa cuidada e Cuidador
+|   +-- Configuração Firebase preparada para Android
+|
++-- Vínculo por token
+|   +-- Pessoa cuidada gera token de 12 caracteres
+|   +-- Token válido por 15 minutos e utilizável uma vez
+|   +-- Cuidador informa o token para iniciar o vínculo
+|   +-- Token não inclui nome ou e-mail da pessoa cuidada
+|
++-- Acompanhamento
+|   +-- Medicamentos e doses do dia sincronizados pelo Firestore
+|   +-- Cuidador consulta os dados em modo somente leitura
+|   +-- Pessoa cuidada continua responsável por cadastrar e atualizar
+|       medicamentos e registrar doses
+|
++-- Verificação
+|   +-- flutter analyze: aprovado
+|   +-- flutter test: 9 testes aprovados
+|   +-- APK Android debug compilado
+|   +-- Regras Firestore ainda não publicadas nem validadas no emulador
+|
++-- Próximas etapas
+    +-- Instalar a versão atual no Pixel 6a via flutter run
+    +-- Habilitar e-mail/senha no Firebase Authentication
+    +-- Criar o banco Firestore, se ainda não existir
+    +-- Publicar firestore.rules no projeto Firebase
+    +-- Testar o vínculo e a sincronização com duas contas/dispositivos
+
+TEXTO EXPLICATIVO
+
+O aplicativo Cuidar+ foi desenvolvido para apoiar a organização da rotina de
+medicamentos, com atenção à acessibilidade de pessoas idosas. A interface tem
+ações simplificadas, textos maiores e opção de modo escuro. A experiência do
+cuidador é separada da experiência da pessoa cuidada.
+
+Foi iniciada a integração com Firebase Authentication e Cloud Firestore. A
+pessoa cuidada pode gerar um token de conexão temporário, e o cuidador pode
+informá-lo para iniciar o vínculo entre as contas. Após a conexão, o cuidador
+consulta a lista de medicamentos e o status das doses do dia. As alterações da
+rotina e os registros de doses permanecem sob responsabilidade da pessoa
+cuidada.
+
+O código inclui regras do Firestore para limitar o acesso aos dados, mas elas
+ainda precisam ser publicadas no projeto Firebase. A tentativa de validar as
+regras com o emulador local não foi concluída porque a versão do Firebase CLI
+instalada exige Java 21 ou superior. A publicação das regras deve ser feita
+depois de confirmar o projeto correto no Firebase Console.
+
+As verificações realizadas no código foram: análise estática Flutter sem
+problemas, execução bem-sucedida dos 9 testes de widget e compilação de um APK
+Android debug. O APK está em:
+
+build\app\outputs\flutter-apk\app-debug.apk
+
+O Pixel 6a ainda estava executando uma versão antiga. Para instalar a versão
+atual diretamente pelo computador, conecte o celular com Depuração USB ativada
+e execute na raiz do projeto:
+
+    flutter devices
+    flutter run -d <IDENTIFICADOR_DO_PIXEL>
+
+O identificador deve ser substituído pelo valor exibido por flutter devices.
+Depois da instalação, é necessário validar no celular o cadastro de duas contas,
+a geração e o uso do token, e a sincronização dos medicamentos e doses.
+
+PRÓXIMAS AÇÕES DO PROJETO
+
+1. Instalar e abrir a versão atual no Pixel 6a.
+2. No Firebase Console, habilitar o método E-mail/senha em Authentication.
+3. Criar o banco Cloud Firestore, caso ainda não exista.
+4. Publicar as regras a partir da pasta do projeto:
+
+    firebase.cmd deploy --only firestore:rules --project med-app-c10db
+
+5. Criar uma conta Pessoa cuidada e outra Cuidador.
+6. Gerar o token na tela Família da pessoa cuidada.
+7. Conectar o cuidador e confirmar a leitura dos dados nos dois dispositivos.
+
+IMPORTANTE
+
+O aplicativo continua sendo um protótipo. Não inserir dados reais de saúde ou
+senhas reutilizadas. A versão atual está configurada para Android; outras
+plataformas precisam de configuração Firebase própria. A conexão entre contas
+e o uso real do Firebase só estarão confirmados depois da publicação das regras
+e do teste em dispositivos.

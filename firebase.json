@@ -1,0 +1,1 @@
+{"firestore":{"rules":"firestore.rules"},"flutter":{"platforms":{"android":{"default":{"projectId":"med-app-c10db","appId":"1:614990289468:android:a7e51a2e7b99cb63d04139","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"med-app-c10db","configurations":{"android":"1:614990289468:android:a7e51a2e7b99cb63d04139"}}}}}}

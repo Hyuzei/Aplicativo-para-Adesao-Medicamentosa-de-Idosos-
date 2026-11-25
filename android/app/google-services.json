@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "614990289468",
+    "firebase_url": "https://med-app-c10db-default-rtdb.firebaseio.com",
+    "project_id": "med-app-c10db",
+    "storage_bucket": "med-app-c10db.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:614990289468:android:a7e51a2e7b99cb63d04139",
+        "android_client_info": {
+          "package_name": "br.com.francisco.med_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "614990289468-f3j5or3fj2l9ut7hiiegb597mhhok27j.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCN5FciPfy6Pln6JqZNY0wpaFZSzKtcKL4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "614990289468-f3j5or3fj2l9ut7hiiegb597mhhok27j.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
